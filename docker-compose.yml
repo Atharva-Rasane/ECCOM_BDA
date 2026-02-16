@@ -1,0 +1,120 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: ecommerce_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 12345678
+      POSTGRES_DB: ecommerce_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB Database
+  mongodb:
+    image: mongo:7-jammy
+    container_name: ecommerce_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_DATABASE: ecommerce_dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Node.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: ecommerce_app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # App Config
+      APP_PORT: 3000
+      NODE_ENV: development
+      SESSION_SECRET: dev_session_secret_change_me
+      STRIPE_API_KEY: ${STRIPE_API_KEY}
+      APP_DOMAIN: http://localhost:3000
+
+      # Database auto-seeding
+      AUTO_SEED_DB: ${AUTO_SEED_DB:-true}
+
+      # Database Config - Using Docker service names
+      DATABASE_URL: postgres://postgres:12345678@postgres:5432/ecommerce_dev
+      DATABASE_NAME: ecommerce_dev
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: 12345678
+      DATABASE_HOST: postgres
+      DATABASE_DIALECT: postgres
+      DATABASE_POOL_MIN: 0
+      DATABASE_POOL_MAX: 5
+      DATABASE_POOL_IDLE: 30000
+      DATABASE_POOL_ACQUIRE: 10000
+
+      # MongoDB Config - Using Docker service name
+      MONGO_URI: mongodb://mongodb:27017/ecommerce_dev
+
+      # Google OAuth2
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_CALLBACK_URL: http://localhost:3000/auth/google/callback
+
+      # Cloudinary
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+
+      # Mailer
+      MAILER_USER: ${MAILER_USER}
+      MAILER_PASSWORD: ${MAILER_PASSWORD}
+    volumes:
+      # Mount source code for hot reload in development
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+    command: npm run dev
+
+  # Portainer - Docker Management UI
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: ecommerce_portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  portainer_data:
+    driver: local
