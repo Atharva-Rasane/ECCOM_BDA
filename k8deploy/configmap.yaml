@@ -4,8 +4,8 @@ metadata:
   name: trendtrove-config
 data:
   NODE_ENV: development
-  APP_DOMAIN: http://127.0.0.1.nip.io
-  GOOGLE_CALLBACK_URL: http://127.0.0.1.nip.io/auth/google/callback
+  APP_DOMAIN: http://34.122.199.244.nip.io
+  GOOGLE_CALLBACK_URL: http://34.122.199.244.nip.io/auth/google/callback
   SESSION_COOKIE_SECURE: "false"
-  SESSION_COOKIE_DOMAIN: 127.0.0.1.nip.io
+  SESSION_COOKIE_DOMAIN: 34.122.199.244.nip.io
   SESSION_COOKIE_SAME_SITE: lax

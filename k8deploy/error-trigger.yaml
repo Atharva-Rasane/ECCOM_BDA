@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: error-trigger
-          image: error-trigger:local
+          image: us-central1-docker.pkg.dev/canaryguard-bda/canaryguard/error-trigger:latest
           env:
             - name: AUTH_BASE
               value: http://auth-service:3000

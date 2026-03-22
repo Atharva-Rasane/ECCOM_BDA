@@ -3,6 +3,9 @@
 .env.docker
 .example.env
 
+# Kubernetes secrets (never commit real credentials)
+k8deploy/secrets.yaml
+
 # Logs
 logs
 *.log

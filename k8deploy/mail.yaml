@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: mail
-          image: trendtrove-mail:local
+          image: us-central1-docker.pkg.dev/canaryguard-bda/canaryguard/trendtrove-mail:latest
           ports:
             - containerPort: 3000
           envFrom:

@@ -35,6 +35,8 @@ spec:
               value: "12345678"
             - name: POSTGRES_DB
               value: ecommerce_dev
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data

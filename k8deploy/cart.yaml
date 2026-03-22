@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: cart
-          image: trendtrove-cart:local
+          image: us-central1-docker.pkg.dev/canaryguard-bda/canaryguard/trendtrove-cart:latest
           ports:
             - containerPort: 3000
           envFrom:
