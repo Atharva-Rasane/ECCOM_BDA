@@ -16,8 +16,12 @@ async function bootstrap(): Promise<void> {
 
         await initializeDatabase();
 
-        await mailer.verify();
-        console.log('Server is ready to send mails');
+        try {
+            await mailer.verify();
+            console.log('Server is ready to send mails');
+        } catch (mailErr) {
+            console.warn('[Mail Warning]: Mail service unavailable, email features will not work.', mailErr);
+        }
 
         app.listen(appConfig.PORT, () => {
             console.log(`[Server] listening on port ${appConfig.PORT}`);
