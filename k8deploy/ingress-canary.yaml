@@ -12,6 +12,20 @@ spec:
     - host: 34.122.199.244.nip.io
       http:
         paths:
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: app-service-v2
+                port:
+                  number: 3000
+          - path: /cart
+            pathType: Prefix
+            backend:
+              service:
+                name: app-service-v2
+                port:
+                  number: 3000
           - path: /
             pathType: Prefix
             backend:
