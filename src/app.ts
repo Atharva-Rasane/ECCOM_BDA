@@ -24,6 +24,7 @@ import telemetryMiddleware from './middlewares/telemetryMiddleware';
 import { logTelemetry } from './telemetry/logger';
 import type { RequestWithTelemetry } from './types/telemetry';
 import { metricsMiddleware, metricsHandler } from './metrics';
+import failureInjectionMiddleware from './middlewares/failureInjectionMiddleware';
 
 const app: Application = express();
 
@@ -40,6 +41,7 @@ app.use(express.static('public'));
 app.use(session(sessionConfig));
 app.use(telemetryMiddleware);
 app.use(metricsMiddleware);
+app.use(failureInjectionMiddleware);
 app.get('/metrics', metricsHandler);
 
 setupPassport();

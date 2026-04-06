@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: trendtrove-app-v2
+  name: trendtrove-app-v3
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: trendtrove-app-v2
+      app: trendtrove-app-v3
   template:
     metadata:
       labels:
-        app: trendtrove-app-v2
+        app: trendtrove-app-v3
     spec:
       containers:
         - name: app
-          image: us-central1-docker.pkg.dev/canaryguard-bda/canaryguard/trendtrove-app:v2
+          image: us-central1-docker.pkg.dev/canaryguard-bda/canaryguard/trendtrove-app:v3
           ports:
             - containerPort: 3000
           envFrom:
@@ -31,27 +31,27 @@ spec:
               memory: 512Mi
           env:
             - name: FAIL_MODE
-              value: "auth"
+              value: "cart"
             - name: SERVICE_NAME
-              value: app-service-v2
+              value: app-service-v3
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: http://otel-collector:4318/v1/traces
+            - name: AUTH_SERVICE_URL
+              value: http://auth-service:3000
             - name: PRODUCT_SERVICE_URL
               value: http://product-service:3000
-            - name: CART_SERVICE_URL
-              value: http://cart-service:3000
             - name: MAIL_SERVICE_URL
               value: http://mail-service:3000
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: app-service-v2
+  name: app-service-v3
   labels:
-    app: trendtrove-app-v2
+    app: trendtrove-app-v3
 spec:
   selector:
-    app: trendtrove-app-v2
+    app: trendtrove-app-v3
   ports:
     - name: http
       port: 3000
