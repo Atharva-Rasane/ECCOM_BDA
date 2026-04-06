@@ -202,20 +202,27 @@ export function purchaseFlow() {
 // ─── Scenario 3: Chaos log injection ────────────────────────────────────────
 
 export function chaosLogs() {
-    const events = [
-        { level: 'WARN',  category: 'system',        event: 'memory.high',         message: 'Memory usage above 80%' },
-        { level: 'ERROR', category: 'payment_fraud',  event: 'payment.failed',      message: 'Stripe payment declined' },
-        { level: 'ERROR', category: 'system',         event: 'db.connection.error', message: 'Database connection timeout' },
-        { level: 'WARN',  category: 'cart_checkout',  event: 'cart.abandoned',      message: 'User abandoned cart at checkout' },
-        { level: 'ERROR', category: 'auth',           event: 'auth.failed',         message: 'Invalid credentials attempt' },
-        { level: 'WARN',  category: 'system',         event: 'latency.spike',       message: 'Response time exceeded 1s threshold' },
+    // Auth-service events — routed to auth-service via /auth/chaos/log
+    const authEvents = [
+        { level: 'ERROR', category: 'auth',   event: 'auth.failed',         message: 'Invalid credentials attempt' },
+        { level: 'WARN',  category: 'auth',   event: 'auth.rate_limit',     message: 'Login rate limit triggered for IP' },
+        { level: 'ERROR', category: 'system', event: 'db.connection.error', message: 'Database connection timeout' },
     ];
 
-    const e = events[Math.floor(Math.random() * events.length)];
+    // Cart-service events — routed to cart-service via /cart/chaos/log
+    const cartEvents = [
+        { level: 'ERROR', category: 'cart_checkout',  event: 'cart.sync.failed',   message: 'Cart state sync conflict between sessions' },
+        { level: 'WARN',  category: 'cart_checkout',  event: 'cart.abandoned',     message: 'User abandoned cart at checkout' },
+        { level: 'ERROR', category: 'payment_fraud',  event: 'payment.failed',     message: 'Stripe payment declined' },
+        { level: 'WARN',  category: 'system',         event: 'memory.high',        message: 'Memory usage above 80%' },
+        { level: 'WARN',  category: 'system',         event: 'latency.spike',      message: 'Response time exceeded 1s threshold' },
+    ];
 
-    http.get(
-        `${BASE_URL}/chaos/log?level=${e.level}&category=${e.category}&event=${e.event}&message=${encodeURIComponent(e.message)}`
-    );
+    const ae = authEvents[Math.floor(Math.random() * authEvents.length)];
+    http.get(`${BASE_URL}/auth/chaos/log?level=${ae.level}&category=${ae.category}&event=${encodeURIComponent(ae.event)}&message=${encodeURIComponent(ae.message)}`);
+
+    const ce = cartEvents[Math.floor(Math.random() * cartEvents.length)];
+    http.get(`${BASE_URL}/cart/chaos/log?level=${ce.level}&category=${ce.category}&event=${encodeURIComponent(ce.event)}&message=${encodeURIComponent(ce.message)}`);
 
     sleep(1);
 }

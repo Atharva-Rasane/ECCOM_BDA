@@ -311,23 +311,32 @@ export function catalogueBrowsing() {
 // ─── Scenario 5: Chaos log injection ─────────────────────────────────────────
 
 export function chaosLogs() {
-    const events = [
-        { level: 'ERROR', category: 'payment_fraud',  event: 'payment.failed',          message: 'Stripe payment declined — card_declined' },
-        { level: 'ERROR', category: 'system',          event: 'db.connection.timeout',   message: 'Postgres connection pool exhausted' },
-        { level: 'ERROR', category: 'system',          event: 'db.query.error',          message: 'Query execution timeout after 5000ms' },
-        { level: 'ERROR', category: 'auth',            event: 'auth.token.invalid',      message: 'JWT verification failed — token expired' },
-        { level: 'ERROR', category: 'cart_checkout',   event: 'cart.sync.failed',        message: 'Cart state sync conflict between sessions' },
-        { level: 'ERROR', category: 'system',          event: 'upstream.unavailable',    message: 'Upstream service returned 503' },
-        { level: 'WARN',  category: 'system',          event: 'memory.high',             message: 'Heap usage at 82% — approaching limit' },
-        { level: 'WARN',  category: 'cart_checkout',   event: 'cart.abandoned',          message: 'User abandoned cart at payment step' },
-        { level: 'WARN',  category: 'system',          event: 'latency.spike',           message: 'p99 response time exceeded 1.2s' },
-        { level: 'WARN',  category: 'payment_fraud',   event: 'payment.suspicious',      message: 'Multiple payment attempts from same IP' },
-        { level: 'WARN',  category: 'auth',            event: 'auth.rate_limit',         message: 'Login rate limit triggered for IP' },
-        { level: 'WARN',  category: 'system',          event: 'disk.usage.high',         message: 'Disk usage at 78% on /data volume' },
+    // Auth-service events — routed to auth-service via /auth/chaos/log
+    const authEvents = [
+        { level: 'ERROR', category: 'auth',   event: 'auth.token.invalid',   message: 'JWT verification failed — token expired' },
+        { level: 'ERROR', category: 'system', event: 'db.connection.timeout',message: 'Postgres connection pool exhausted' },
+        { level: 'ERROR', category: 'system', event: 'upstream.unavailable', message: 'Upstream service returned 503' },
+        { level: 'WARN',  category: 'auth',   event: 'auth.rate_limit',      message: 'Login rate limit triggered for IP' },
+        { level: 'WARN',  category: 'system', event: 'memory.high',          message: 'Heap usage at 82% — approaching limit' },
+        { level: 'WARN',  category: 'system', event: 'disk.usage.high',      message: 'Disk usage at 78% on /data volume' },
     ];
 
-    const e = pick(events);
-    http.get(`${BASE_URL}/chaos/log?level=${e.level}&category=${e.category}&event=${encodeURIComponent(e.event)}&message=${encodeURIComponent(e.message)}`);
+    // Cart-service events — routed to cart-service via /cart/chaos/log
+    const cartEvents = [
+        { level: 'ERROR', category: 'payment_fraud', event: 'payment.failed',       message: 'Stripe payment declined — card_declined' },
+        { level: 'ERROR', category: 'system',        event: 'db.query.error',        message: 'Query execution timeout after 5000ms' },
+        { level: 'ERROR', category: 'cart_checkout', event: 'cart.sync.failed',      message: 'Cart state sync conflict between sessions' },
+        { level: 'WARN',  category: 'cart_checkout', event: 'cart.abandoned',        message: 'User abandoned cart at payment step' },
+        { level: 'WARN',  category: 'system',        event: 'latency.spike',         message: 'p99 response time exceeded 1.2s' },
+        { level: 'WARN',  category: 'payment_fraud', event: 'payment.suspicious',    message: 'Multiple payment attempts from same IP' },
+    ];
+
+    const ae = pick(authEvents);
+    http.get(`${BASE_URL}/auth/chaos/log?level=${ae.level}&category=${ae.category}&event=${encodeURIComponent(ae.event)}&message=${encodeURIComponent(ae.message)}`);
+
+    const ce = pick(cartEvents);
+    http.get(`${BASE_URL}/cart/chaos/log?level=${ce.level}&category=${ce.category}&event=${encodeURIComponent(ce.event)}&message=${encodeURIComponent(ce.message)}`);
+
     sleep(1);
 }
 

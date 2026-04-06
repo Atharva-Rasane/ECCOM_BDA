@@ -1,0 +1,459 @@
+{
+  "dashboard": {
+    "title": "TrendTrove — Cart & Auth Service Health",
+    "uid": "failure-detection-v2",
+    "tags": ["trendtrove", "health", "sre", "failure-detection"],
+    "timezone": "browser",
+    "refresh": "15s",
+    "time": { "from": "now-15m", "to": "now" },
+    "panels": [
+
+      {
+        "type": "row", "id": 1,
+        "title": "Service Health at a Glance",
+        "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 2, "title": "Cart Service — Activity", "type": "stat",
+        "description": "Total log events per second. Green = service is alive and receiving traffic.",
+        "gridPos": { "x": 0, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum(rate({app=\"cart-service\"} | json [1m]))",
+          "refId": "A", "instant": true, "legendFormat": "events/s"
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background", "graphMode": "area",
+          "orientation": "auto", "textMode": "value_and_name", "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps", "decimals": 2,
+            "displayName": "Cart — Active",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red",   "value": null  },
+                { "color": "green", "value": 0.01  }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 3, "title": "Cart Service — Errors", "type": "stat",
+        "description": "Error log events per second. Should be 0 (green). Turns red on failure injection.",
+        "gridPos": { "x": 6, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum(rate({app=\"cart-service\"} | json | level=\"ERROR\" [2m]))",
+          "refId": "A", "instant": true, "legendFormat": "errors/s"
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background", "graphMode": "area",
+          "orientation": "auto", "textMode": "value_and_name", "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps", "decimals": 3,
+            "displayName": "Cart — Errors",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null  },
+                { "color": "yellow", "value": 0.005 },
+                { "color": "red",    "value": 0.02  }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 4, "title": "Auth Service — Activity", "type": "stat",
+        "description": "Total log events per second. Green = service is alive and receiving traffic.",
+        "gridPos": { "x": 12, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum(rate({app=\"trendtrove-auth\"} | json [1m]))",
+          "refId": "A", "instant": true, "legendFormat": "events/s"
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background", "graphMode": "area",
+          "orientation": "auto", "textMode": "value_and_name", "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps", "decimals": 2,
+            "displayName": "Auth — Active",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "red",   "value": null  },
+                { "color": "green", "value": 0.01  }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 5, "title": "Auth Service — Login Failures", "type": "stat",
+        "description": "WARN-level login failure events per second. Baseline from k6 authFailures scenario. Spikes indicate attack or misconfiguration.",
+        "gridPos": { "x": 18, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum(rate({app=\"trendtrove-auth\"} | json | event=\"user.login.failure\" [2m]))",
+          "refId": "A", "instant": true, "legendFormat": "failures/s"
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background", "graphMode": "area",
+          "orientation": "auto", "textMode": "value_and_name", "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps", "decimals": 3,
+            "displayName": "Auth — Login Failures",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null  },
+                { "color": "yellow", "value": 0.05  },
+                { "color": "red",    "value": 0.3   }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "type": "row", "id": 10,
+        "title": "Error Rate Over Time — Cart vs Auth",
+        "gridPos": { "x": 0, "y": 7, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 11,
+        "title": "ERROR Log Rate — Cart vs Auth (spike here = service is failing)",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 8, "w": 24, "h": 8 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum(rate({app=\"cart-service\"}    | json | level=\"ERROR\" [1m]))", "refId": "A", "legendFormat": "cart-service errors/s"    },
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | level=\"ERROR\" [1m]))", "refId": "B", "legendFormat": "auth-service errors/s"    },
+          { "expr": "sum(rate({app=\"cart-service\"}    | json | level=\"WARN\"  [1m]))", "refId": "C", "legendFormat": "cart-service warnings/s"  },
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | level=\"WARN\"  [1m]))", "refId": "D", "legendFormat": "auth-service warnings/s"  }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "cart-service errors/s"   }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } }] },
+            { "matcher": { "id": "byName", "options": "auth-service errors/s"   }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF7383" } }] },
+            { "matcher": { "id": "byName", "options": "cart-service warnings/s" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FADE2A" } }] },
+            { "matcher": { "id": "byName", "options": "auth-service warnings/s" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }] }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "type": "row", "id": 20,
+        "title": "Auth Service — Detail",
+        "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 21,
+        "title": "Auth — Login Failures Over Time",
+        "description": "WARN: user.login.failure events. Generated by the k6 authFailures scenario (bad credentials) and by real failed login attempts. A steady baseline is expected; a spike indicates a problem.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 17, "w": 12, "h": 8 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | event=\"user.login.failure\" [1m]))", "refId": "A", "legendFormat": "login failures/s" },
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | event=\"user.signup\"         [1m]))", "refId": "B", "legendFormat": "signups/s"         },
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | event=\"user.logout\"         [1m]))", "refId": "C", "legendFormat": "logouts/s"         }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 15 } },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "login failures/s" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } }] },
+            { "matcher": { "id": "byName", "options": "signups/s"         }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] },
+            { "matcher": { "id": "byName", "options": "logouts/s"         }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#8AB8FF" } }] }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+
+      {
+        "id": 22,
+        "title": "Auth — INFO / WARN / ERROR Level Breakdown",
+        "description": "Under normal operation: mostly INFO. WARN spikes = login failures. ERROR spikes = chaos injection or real system failure.",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 17, "w": 12, "h": 8 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | level=\"INFO\"  [1m]))", "refId": "A", "legendFormat": "INFO" },
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | level=\"WARN\"  [1m]))", "refId": "B", "legendFormat": "WARN" },
+          { "expr": "sum(rate({app=\"trendtrove-auth\"} | json | level=\"ERROR\" [1m]))", "refId": "C", "legendFormat": "ERROR" }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 18 } },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "INFO"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] },
+            { "matcher": { "id": "byName", "options": "WARN"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FADE2A" } }] },
+            { "matcher": { "id": "byName", "options": "ERROR" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } }] }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+
+      {
+        "type": "row", "id": 30,
+        "title": "Cart Service — Detail",
+        "gridPos": { "x": 0, "y": 25, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 31,
+        "title": "Cart — Business Events (key success indicators)",
+        "description": "These INFO events confirm the cart flow is working end-to-end. If any line drops to 0, that step in the funnel is broken.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 26, "w": 12, "h": 8 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum(rate({app=\"cart-service\"} | json | event=\"cart.item.added\"     [1m]))", "refId": "A", "legendFormat": "item added"           },
+          { "expr": "sum(rate({app=\"cart-service\"} | json | event=\"cart.viewed\"         [1m]))", "refId": "B", "legendFormat": "cart viewed"          },
+          { "expr": "sum(rate({app=\"cart-service\"} | json | event=\"checkout.initiated\"  [1m]))", "refId": "C", "legendFormat": "checkout initiated"   },
+          { "expr": "sum(rate({app=\"cart-service\"} | json | event=\"payment.initiated\"   [1m]))", "refId": "D", "legendFormat": "payment initiated"    }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 12 } },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "item added"         }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] },
+            { "matcher": { "id": "byName", "options": "cart viewed"        }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#8AB8FF" } }] },
+            { "matcher": { "id": "byName", "options": "checkout initiated" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FADE2A" } }] },
+            { "matcher": { "id": "byName", "options": "payment initiated"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } }] }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+
+      {
+        "id": 32,
+        "title": "Cart — INFO / WARN / ERROR Level Breakdown",
+        "description": "Under normal operation: all INFO. Any WARN/ERROR requires chaos injection or a real failure.",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 26, "w": 12, "h": 8 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum(rate({app=\"cart-service\"} | json | level=\"INFO\"  [1m]))", "refId": "A", "legendFormat": "INFO" },
+          { "expr": "sum(rate({app=\"cart-service\"} | json | level=\"WARN\"  [1m]))", "refId": "B", "legendFormat": "WARN" },
+          { "expr": "sum(rate({app=\"cart-service\"} | json | level=\"ERROR\" [1m]))", "refId": "C", "legendFormat": "ERROR" }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 18 } },
+          "overrides": [
+            { "matcher": { "id": "byName", "options": "INFO"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }] },
+            { "matcher": { "id": "byName", "options": "WARN"  }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FADE2A" } }] },
+            { "matcher": { "id": "byName", "options": "ERROR" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } }] }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi" }
+        }
+      },
+
+      {
+        "type": "row", "id": 40,
+        "title": "Failure Injection Monitor — Chaos Events by Category",
+        "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 41,
+        "title": "Cart — Injected Failures by Category",
+        "description": "ERROR and WARN events from chaos injection on cart-service. Use the error-trigger service to fire these.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 35, "w": 12, "h": 7 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum by (category) (rate({app=\"cart-service\"} | json | level=\"ERROR\" [1m]))", "refId": "A", "legendFormat": "ERROR: {{category}}" },
+          { "expr": "sum by (category) (rate({app=\"cart-service\"} | json | level=\"WARN\"  [1m]))", "refId": "B", "legendFormat": "WARN: {{category}}"  }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } }
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "id": 42,
+        "title": "Auth — Injected Failures by Category",
+        "description": "ERROR and WARN events from chaos injection on auth-service. Also captures real login failures from k6.",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 35, "w": 12, "h": 7 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          { "expr": "sum by (category) (rate({app=\"trendtrove-auth\"} | json | level=\"ERROR\" [1m]))", "refId": "A", "legendFormat": "ERROR: {{category}}" },
+          { "expr": "sum by (category) (rate({app=\"trendtrove-auth\"} | json | level=\"WARN\"  [1m]))", "refId": "B", "legendFormat": "WARN: {{category}}"  }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "reqps", "custom": { "lineWidth": 2, "fillOpacity": 10 } }
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "id": 43,
+        "title": "Cart — Injected Failure Events (breakdown by event name)",
+        "description": "Shows which specific chaos events are firing. Useful for confirming error-trigger calls are reaching cart-service.",
+        "type": "table",
+        "gridPos": { "x": 0, "y": 42, "w": 12, "h": 7 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          {
+            "expr": "sum by (event, level) (count_over_time({app=\"cart-service\"} | json | level!=\"INFO\" [15m]))",
+            "refId": "A", "instant": true, "legendFormat": "{{level}} — {{event}}"
+          }
+        ],
+        "transformations": [
+          { "id": "reduce", "options": { "reducers": ["sum"] } },
+          { "id": "sortBy", "options": { "fields": [{ "displayName": "Total", "desc": true }] } }
+        ],
+        "options": { "sortBy": [{ "displayName": "Value", "desc": true }] },
+        "fieldConfig": {
+          "defaults": { "unit": "short" },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Field" },
+              "properties": [{ "id": "displayName", "value": "Event" }, { "id": "custom.width", "value": 320 }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Total" },
+              "properties": [
+                { "id": "displayName", "value": "Count (last 15m)" },
+                { "id": "custom.displayMode", "value": "color-background" },
+                { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }, { "color": "red", "value": 5 }] } }
+              ]
+            }
+          ]
+        }
+      },
+
+      {
+        "id": 44,
+        "title": "Auth — Injected Failure Events (breakdown by event name)",
+        "description": "Shows which specific chaos events are firing on auth-service, including real login failures.",
+        "type": "table",
+        "gridPos": { "x": 12, "y": 42, "w": 12, "h": 7 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          {
+            "expr": "sum by (event, level) (count_over_time({app=\"trendtrove-auth\"} | json | level!=\"INFO\" [15m]))",
+            "refId": "A", "instant": true, "legendFormat": "{{level}} — {{event}}"
+          }
+        ],
+        "transformations": [
+          { "id": "reduce", "options": { "reducers": ["sum"] } },
+          { "id": "sortBy", "options": { "fields": [{ "displayName": "Total", "desc": true }] } }
+        ],
+        "options": { "sortBy": [{ "displayName": "Value", "desc": true }] },
+        "fieldConfig": {
+          "defaults": { "unit": "short" },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Field" },
+              "properties": [{ "id": "displayName", "value": "Event" }, { "id": "custom.width", "value": 320 }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Total" },
+              "properties": [
+                { "id": "displayName", "value": "Count (last 15m)" },
+                { "id": "custom.displayMode", "value": "color-background" },
+                { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }, { "color": "red", "value": 5 }] } }
+              ]
+            }
+          ]
+        }
+      },
+
+      {
+        "type": "row", "id": 50,
+        "title": "Live Error Feed",
+        "gridPos": { "x": 0, "y": 49, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 51,
+        "title": "Live ERROR + WARN Log Stream — Cart & Auth",
+        "description": "Real-time log entries from both services at WARN or ERROR level. Expand a row to see full structured JSON.",
+        "type": "logs",
+        "gridPos": { "x": 0, "y": 50, "w": 24, "h": 10 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          {
+            "expr": "{app=~\"cart-service|trendtrove-auth\"} | json | level=~\"ERROR|WARN\"",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": true,
+          "prettifyLogMessage": true,
+          "enableLogDetails": true,
+          "dedupStrategy": "none",
+          "sortOrder": "Descending"
+        }
+      }
+
+    ],
+    "schemaVersion": 36
+  },
+  "overwrite": true,
+  "folderId": 0
+}

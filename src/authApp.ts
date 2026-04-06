@@ -110,6 +110,24 @@ app.get('/chaos/log', (req: RequestWithTelemetry, res) => {
     res.json({ status: 'ok', level: finalLevel, category, event });
 });
 
+// Chaos log endpoint reachable via ingress at /auth/chaos/log
+app.get('/auth/chaos/log', (req: RequestWithTelemetry, res) => {
+    const allowed = ['DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL'] as const;
+    const level =
+        (req.query.level as string | undefined)?.toUpperCase() ?? 'INFO';
+    const finalLevel = allowed.includes(level as any)
+        ? (level as typeof allowed[number])
+        : 'INFO';
+    const category = (req.query.category as string) ?? 'system';
+    const event = (req.query.event as string) ?? `chaos.${finalLevel.toLowerCase()}`;
+    const message =
+        (req.query.message as string) ??
+        `Chaos log ${finalLevel.toLowerCase()} from auth`;
+
+    logTelemetry(req as any, res, finalLevel, category as any, event, message, {});
+    res.json({ status: 'ok', level: finalLevel, category, event });
+});
+
 app.use('/auth', authRouter);
 
 app.use((req, res) => {
