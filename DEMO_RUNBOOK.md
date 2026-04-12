@@ -72,13 +72,13 @@ Import these JSON files into Grafana (Settings > Dashboards > Import):
 
 ```bash
 # Grafana (open http://localhost:3001)
-kubectl port-forward svc/grafana 3001:80 -n ecommerce
+kubectl port-forward svc/grafana 3001:80
 
 # Prometheus (open http://localhost:9090)
-kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090 -n ecommerce
+kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090
 
 # Jaeger (open http://localhost:16686)
-kubectl port-forward svc/jaeger-query 16686:16686 -n ecommerce
+kubectl port-forward svc/jaeger-query 16686:16686
 ```
 
 ### Available k6 Scripts
@@ -198,7 +198,7 @@ kubectl logs job/k6-canary-auth-test -f
 
 # Quick check: are 5xx errors showing up in Prometheus?
 # (run this in a separate terminal)
-kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090 -n ecommerce
+kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090
 # Then query: rate(http_requests_total{service="app-service-v2",status_code=~"5.."}[1m])
 ```
 
@@ -417,7 +417,7 @@ kubectl delete job <job-name> --ignore-not-found
 **Canary controller not detecting errors:**
 ```bash
 # Check if Prometheus is scraping the canary
-kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090 -n ecommerce
+kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090
 # Visit http://localhost:9090 and query: http_requests_total{service="app-service-v2"}
 ```
 

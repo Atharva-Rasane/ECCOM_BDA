@@ -172,25 +172,25 @@ data:
       const p95        = get('auth_latency_ms', 'p(95)');
       const totalReqs  = get('http_reqs', 'count');
 
-      const out = `
-=== CANARY v2 AUTH TEST SUMMARY ===
-Total HTTP requests : ${totalReqs}
-== LOGIN ==
-  Success (200/302) : ${totalOk}
-  Rejected -> 302 v1: ${totalRedir}
-  Broken  -> 500  v2: ${total5xx}
-== SIGNUP ==
-  Success           : ${signupOk}
-  Broken  -> 500  v2: ${signup5xx}
-== RATES ==
-  auth_5xx_rate     : ${(rate5xx*100).toFixed(1)}%  (expect ~10% if only v2 broken)
-  auth p95 latency  : ${p95.toFixed(0)}ms
-== GRAFANA QUERIES ==
-  {app="trendtrove-app-v2", level="ERROR"}
-  {service="app-service-v2"} | json | event=~"auth.*"
-  rate(http_requests_total{status_code=~"5..",service="app-service-v2"}[1m])
-===================================
-`;
+      const out = [
+        '=== CANARY v2 AUTH TEST SUMMARY ===',
+        'Total HTTP requests: ' + totalReqs,
+        '== LOGIN ==',
+        '  Success (200/302): ' + totalOk,
+        '  Rejected -> 302 v1: ' + totalRedir,
+        '  Broken  -> 500  v2: ' + total5xx,
+        '== SIGNUP ==',
+        '  Success: ' + signupOk,
+        '  Broken  -> 500  v2: ' + signup5xx,
+        '== RATES ==',
+        '  auth_5xx_rate: ' + (rate5xx*100).toFixed(1) + '%  (expect ~10% if only v2 broken)',
+        '  auth p95 latency: ' + p95.toFixed(0) + 'ms',
+        '== GRAFANA QUERIES ==',
+        '  {app="trendtrove-app-v2", level="ERROR"}',
+        '  {service="app-service-v2"} | json | event=~"auth.*"',
+        '  rate(http_requests_total{status_code=~"5..",service="app-service-v2"}[1m])',
+        '===================================',
+      ].join('\n');
       console.log(out);
       return { stdout: out };
     }
