@@ -1,6 +1,39 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Loki  –  log storage & query backend
 # ──────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: loki-pv
+  labels:
+    app: loki
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: loki-local
+  hostPath:
+    # For local clusters (kind/minikube/Docker Desktop); adjust for your storage class
+    path: /mnt/data/loki
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: loki-pvc
+  namespace: default
+  labels:
+    app: loki
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: loki-local
+  resources:
+    requests:
+      storage: 5Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -36,7 +69,8 @@ spec:
           configMap:
             name: loki-config
         - name: loki-storage
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: loki-pvc
 ---
 apiVersion: v1
 kind: ConfigMap
