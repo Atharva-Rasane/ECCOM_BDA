@@ -1,0 +1,670 @@
+{
+  "dashboard": {
+    "title": "TrendTrove — Canary v2: Auth Failure Detection",
+    "description": "Shows the moment v2 (FAIL_MODE=auth) starts returning 500s on every /auth route, triggering an automatic rollback. Top row goes RED when the canary is unhealthy.",
+    "uid": "canary-auth-failure-v1",
+    "tags": ["trendtrove", "canary", "auth", "rollback", "loki"],
+    "timezone": "browser",
+    "refresh": "10s",
+    "time": { "from": "now-15m", "to": "now" },
+    "schemaVersion": 36,
+
+    "panels": [
+
+      {
+        "type": "row",
+        "id": 1,
+        "title": "Canary Health — v1 (stable) vs v2 (canary)",
+        "description": "These four stats are your rollback signal. v2 goes red the moment auth starts failing.",
+        "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 2,
+        "title": "v1 (stable) — 5xx Error Rate",
+        "description": "Baseline: should stay at 0% throughout the demo. If this goes red, the problem is not canary-specific.",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [{
+          "expr": "100 * sum(rate(http_requests_total{service=\"app-service\", status_code=~\"5..\"}[2m])) / sum(rate(http_requests_total{service=\"app-service\"}[2m]))",
+          "refId": "A",
+          "instant": true
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background",
+          "graphMode": "area",
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "displayName": "v1 — 5xx Rate",
+            "noValue": "0.0%",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null },
+                { "color": "yellow", "value": 1    },
+                { "color": "red",    "value": 5    }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 3,
+        "title": "v2 CANARY — 5xx Error Rate",
+        "description": "This turns RED (100%) when v2 is deployed with FAIL_MODE=auth. Every /auth request fails. This is your rollback trigger.",
+        "type": "stat",
+        "gridPos": { "x": 6, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [{
+          "expr": "100 * sum(rate(http_requests_total{service=\"app-service-v2\", status_code=~\"5..\"}[2m])) / sum(rate(http_requests_total{service=\"app-service-v2\"}[2m]))",
+          "refId": "A",
+          "instant": true
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background",
+          "graphMode": "area",
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "decimals": 1,
+            "displayName": "v2 — 5xx Rate",
+            "noValue": "No data yet",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null },
+                { "color": "yellow", "value": 1    },
+                { "color": "red",    "value": 5    }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 4,
+        "title": "v2 — Auth Failures Logged (last 5m)",
+        "description": "Count of ERROR-level log entries from v2 where event=service.unavailable. Each entry is one intercepted /auth request.",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum(count_over_time({app=\"trendtrove-app-v2\"} | json | level=\"ERROR\" [5m]))",
+          "refId": "A",
+          "instant": true
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background",
+          "graphMode": "area",
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "displayName": "Auth Failures (5m)",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null },
+                { "color": "yellow", "value": 1    },
+                { "color": "red",    "value": 10   }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 5,
+        "title": "v2 — Auth Error Rate (logs/s)",
+        "description": "Rolling 2-minute rate of ERROR log entries from v2. This should be 0 when v2 is healthy and spike sharply when FAIL_MODE=auth is active.",
+        "type": "stat",
+        "gridPos": { "x": 18, "y": 1, "w": 6, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum(rate({app=\"trendtrove-app-v2\"} | json | level=\"ERROR\" [2m]))",
+          "refId": "A",
+          "instant": true
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background",
+          "graphMode": "area",
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "decimals": 3,
+            "displayName": "Error Rate (v2)",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null  },
+                { "color": "yellow", "value": 0.01  },
+                { "color": "red",    "value": 0.05  }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "type": "row",
+        "id": 10,
+        "title": "Traffic Split — Canary Gets 10% of Requests",
+        "gridPos": { "x": 0, "y": 7, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 11,
+        "title": "Request Rate: v1 vs v2 (canary at ~10% weight)",
+        "description": "The NGINX ingress sends ~10% of traffic to v2. You should see v2 consistently at ~1/9th of v1's rate. This confirms the canary is receiving real user traffic.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app-service\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "v1 (stable) — req/s"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app-service-v2\"}[$__rate_interval]))",
+            "refId": "B",
+            "legendFormat": "v2 (canary) — req/s"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": { "lineWidth": 2, "fillOpacity": 8 }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "v1 (stable) — req/s" },
+              "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "v2 (canary) — req/s" },
+              "properties": [
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } },
+                { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "id": 12,
+        "title": "Auth Route — Requests per Second (v1 vs v2)",
+        "description": "Traffic specifically on /auth routes. v2 receives ~10% of all login/signup attempts. When v2 goes red, those users can't log in.",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app-service\", route=~\"/auth.*\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "v1 — /auth req/s"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app-service-v2\", route=~\"/auth.*\"}[$__rate_interval]))",
+            "refId": "B",
+            "legendFormat": "v2 — /auth req/s (failing)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": { "lineWidth": 2, "fillOpacity": 10 }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "v1 — /auth req/s" },
+              "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "v2 — /auth req/s (failing)" },
+              "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } }]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "type": "row",
+        "id": 20,
+        "title": "The Failure Signal — v2 Error Rate Spikes, v1 Stays Flat",
+        "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 21,
+        "title": "5xx Error Rate by Version — v2 Shoots to 100% on Auth Failure",
+        "description": "This is the primary rollback signal. v1 stays at 0%. v2 (canary) immediately reaches ~100% when FAIL_MODE=auth is active because every /auth request returns HTTP 500.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 17, "w": 14, "h": 9 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "100 * sum(rate(http_requests_total{service=\"app-service\", status_code=~\"5..\"}[$__rate_interval])) / sum(rate(http_requests_total{service=\"app-service\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "v1 (stable) — 5xx %"
+          },
+          {
+            "expr": "100 * sum(rate(http_requests_total{service=\"app-service-v2\", status_code=~\"5..\"}[$__rate_interval])) / sum(rate(http_requests_total{service=\"app-service-v2\"}[$__rate_interval]))",
+            "refId": "B",
+            "legendFormat": "v2 (canary) — 5xx %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "max": 105,
+            "custom": { "lineWidth": 2, "fillOpacity": 15 },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0,  "color": "green"  },
+                { "value": 5,  "color": "orange" },
+                { "value": 20, "color": "red"    }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "v1 (stable) — 5xx %" },
+              "properties": [
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } },
+                { "id": "custom.fillOpacity", "value": 5 }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "v2 (canary) — 5xx %" },
+              "properties": [
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } },
+                { "id": "custom.fillOpacity", "value": 25 }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "id": 22,
+        "title": "HTTP 500s per Second — v2 Auth Routes",
+        "description": "Absolute 500 error rate on v2. Every bar here is a user who tried to log in or sign up and got an error page.",
+        "type": "timeseries",
+        "gridPos": { "x": 14, "y": 17, "w": 10, "h": 9 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app-service-v2\", status_code=\"500\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "v2 — 500 errors/s (all routes)"
+          },
+          {
+            "expr": "sum(rate(http_requests_total{service=\"app-service-v2\", status_code=\"500\", route=~\"/auth.*\"}[$__rate_interval]))",
+            "refId": "B",
+            "legendFormat": "v2 — 500 errors/s (/auth routes)"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "min": 0,
+            "custom": { "lineWidth": 2, "fillOpacity": 20 }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "v2 — 500 errors/s (all routes)" },
+              "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF7383" } }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "v2 — 500 errors/s (/auth routes)" },
+              "properties": [
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } },
+                { "id": "custom.lineWidth", "value": 3 }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "type": "row",
+        "id": 30,
+        "title": "Loki Evidence — Structured Error Logs Proving Why v2 Failed",
+        "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 31,
+        "title": "ERROR Log Rate — v2 vs v1 (Loki)",
+        "description": "Every /auth request on v2 produces one ERROR log line with event=service.unavailable. v1 has no errors. The divergence is the proof.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 27, "w": 14, "h": 8 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [
+          {
+            "expr": "sum(rate({app=\"trendtrove-app\"} | json | level=\"ERROR\" [$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "v1 — errors/s"
+          },
+          {
+            "expr": "sum(rate({app=\"trendtrove-app-v2\"} | json | level=\"ERROR\" [$__rate_interval]))",
+            "refId": "B",
+            "legendFormat": "v2 — errors/s (auth failure)"
+          },
+          {
+            "expr": "sum(rate({app=\"trendtrove-app-v2\"} | json | event=\"service.unavailable\" [$__rate_interval]))",
+            "refId": "C",
+            "legendFormat": "v2 — service.unavailable events/s"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "min": 0,
+            "custom": { "lineWidth": 2, "fillOpacity": 12 }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "v1 — errors/s" },
+              "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "#73BF69" } }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "v2 — errors/s (auth failure)" },
+              "properties": [
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "#F2495C" } },
+                { "id": "custom.fillOpacity", "value": 25 }
+              ]
+            },
+            {
+              "matcher": { "id": "byName", "options": "v2 — service.unavailable events/s" },
+              "properties": [
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "#FF9830" } },
+                { "id": "custom.lineStyle", "value": { "dash": [6, 3], "fill": "dash" } }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+          "tooltip": { "mode": "multi", "sort": "desc" }
+        }
+      },
+
+      {
+        "id": 32,
+        "title": "Auth Endpoints Returning 500 on v2 (Prometheus)",
+        "description": "Which specific /auth routes are failing on v2. In FAIL_MODE=auth all of them fail equally — login, signup, logout.",
+        "type": "bargauge",
+        "gridPos": { "x": 14, "y": 27, "w": 10, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [{
+          "expr": "topk(10, sum by (route) (increase(http_requests_total{service=\"app-service-v2\", status_code=\"500\"}[$__range])))",
+          "refId": "A",
+          "legendFormat": "{{route}}",
+          "instant": true
+        }],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0,  "color": "green"  },
+                { "value": 1,  "color": "yellow" },
+                { "value": 10, "color": "red"    }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        }
+      },
+
+      {
+        "type": "row",
+        "id": 40,
+        "title": "Live Auth Failure Log Stream — v2 Only",
+        "gridPos": { "x": 0, "y": 35, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 41,
+        "title": "v2 ERROR Logs — Auth Failure Messages in Real Time",
+        "description": "Structured log entries emitted by failureInjectionMiddleware on v2. Every line is one user who got a 500 error trying to log in or sign up. Expand any row to see the full JSON with trace_id, request_id, http.path, and error details.",
+        "type": "logs",
+        "gridPos": { "x": 0, "y": 36, "w": 14, "h": 10 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "{app=\"trendtrove-app-v2\"} | json | level=\"ERROR\"",
+          "refId": "A"
+        }],
+        "options": {
+          "showTime": true,
+          "showLabels": true,
+          "showCommonLabels": false,
+          "wrapLogMessage": false,
+          "prettifyLogMessage": false,
+          "enableLogDetails": true,
+          "dedupStrategy": "none",
+          "sortOrder": "Descending"
+        }
+      },
+
+      {
+        "id": 42,
+        "title": "v1 Logs — Should Show No Errors",
+        "description": "Control group. v1 under the same k6 traffic load should produce only INFO-level auth events (successful logins/signups). No ERRORs here confirms the failure is canary-specific.",
+        "type": "logs",
+        "gridPos": { "x": 14, "y": 36, "w": 10, "h": 10 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "{app=\"trendtrove-app\"} | json | level=~\"WARN|ERROR\"",
+          "refId": "A"
+        }],
+        "options": {
+          "showTime": true,
+          "showLabels": false,
+          "showCommonLabels": false,
+          "wrapLogMessage": false,
+          "prettifyLogMessage": false,
+          "enableLogDetails": true,
+          "dedupStrategy": "none",
+          "sortOrder": "Descending"
+        }
+      },
+
+      {
+        "type": "row",
+        "id": 50,
+        "title": "Canary Rollback Readiness",
+        "gridPos": { "x": 0, "y": 46, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 51,
+        "title": "v2 vs v1 — 5xx Rate Ratio",
+        "description": "How many times worse is v2 compared to v1? A ratio >10x is an unambiguous rollback signal. During auth failure mode, this is effectively infinite (v2=100%, v1=0%).",
+        "type": "stat",
+        "gridPos": { "x": 0, "y": 47, "w": 8, "h": 6 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [{
+          "expr": "(\n  sum(rate(http_requests_total{service=\"app-service-v2\", status_code=~\"5..\"}[5m])) /\n  sum(rate(http_requests_total{service=\"app-service-v2\"}[5m]))\n) / (\n  (sum(rate(http_requests_total{service=\"app-service\", status_code=~\"5..\"}[5m])) + 0.0001) /\n  sum(rate(http_requests_total{service=\"app-service\"}[5m]))\n)",
+          "refId": "A",
+          "instant": true
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background",
+          "graphMode": "none",
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "displayName": "v2/v1 Error Ratio",
+            "noValue": "—",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null },
+                { "color": "yellow", "value": 2    },
+                { "color": "orange", "value": 5    },
+                { "color": "red",    "value": 10   }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 52,
+        "title": "Total Auth Failures on v2 (window)",
+        "description": "Total number of failed auth requests routed to v2 in the selected time range. Each one is a user who could not log in.",
+        "type": "stat",
+        "gridPos": { "x": 8, "y": 47, "w": 8, "h": 6 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [{
+          "expr": "sum(increase(http_requests_total{service=\"app-service-v2\", status_code=\"500\"}[$__range]))",
+          "refId": "A",
+          "instant": true
+        }],
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "colorMode": "background",
+          "graphMode": "area",
+          "orientation": "auto",
+          "textMode": "value_and_name",
+          "justifyMode": "center"
+        },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "decimals": 0,
+            "displayName": "Total 500s on v2",
+            "noValue": "0",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green",  "value": null },
+                { "color": "yellow", "value": 5    },
+                { "color": "red",    "value": 20   }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        }
+      },
+
+      {
+        "id": 53,
+        "title": "v2 Canary — Unique Error Events (Loki)",
+        "description": "Distinct error event types logged by v2. During FAIL_MODE=auth you will only see service.unavailable — a very tight failure signature. This confirms the failure is not multi-cause noise.",
+        "type": "table",
+        "gridPos": { "x": 16, "y": 47, "w": 8, "h": 6 },
+        "datasource": { "type": "loki", "uid": "ffh82mih4h2pse" },
+        "targets": [{
+          "expr": "sum by (event, level) (count_over_time({app=\"trendtrove-app-v2\"} | json | level!=\"INFO\" [$__range]))",
+          "refId": "A",
+          "instant": true,
+          "legendFormat": "{{level}} — {{event}}"
+        }],
+        "transformations": [
+          { "id": "reduce", "options": { "reducers": ["sum"] } },
+          { "id": "sortBy", "options": { "fields": [{ "displayName": "Total", "desc": true }] } }
+        ],
+        "options": { "sortBy": [{ "displayName": "Value", "desc": true }] },
+        "fieldConfig": {
+          "defaults": { "unit": "short" },
+          "overrides": [
+            {
+              "matcher": { "id": "byName", "options": "Field" },
+              "properties": [{ "id": "displayName", "value": "Level — Event" }, { "id": "custom.width", "value": 260 }]
+            },
+            {
+              "matcher": { "id": "byName", "options": "Total" },
+              "properties": [
+                { "id": "displayName", "value": "Count" },
+                { "id": "custom.displayMode", "value": "color-background" },
+                { "id": "thresholds", "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "yellow", "value": null },
+                    { "color": "red",    "value": 5    }
+                  ]
+                }}
+              ]
+            }
+          ]
+        }
+      }
+
+    ]
+  },
+  "overwrite": true,
+  "folderId": 0
+}

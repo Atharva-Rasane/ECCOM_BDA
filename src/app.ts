@@ -25,6 +25,35 @@ import { logTelemetry } from './telemetry/logger';
 import type { RequestWithTelemetry } from './types/telemetry';
 import { metricsMiddleware, metricsHandler } from './metrics';
 import failureInjectionMiddleware from './middlewares/failureInjectionMiddleware';
+import { createProxyMiddleware, type Options } from 'http-proxy-middleware';
+import type { ClientRequest, IncomingMessage } from 'http';
+
+// express.json() and bodyParser.urlencoded() consume the request stream before
+// the proxy can forward it. This hook reconstructs the body from req.body so
+// POST/PUT payloads reach the upstream service intact.
+function fixBody(proxyReq: ClientRequest, req: IncomingMessage): void {
+    const expressReq = req as Request;
+    if (!expressReq.body || Object.keys(expressReq.body).length === 0) return;
+
+    const contentType = (proxyReq.getHeader('Content-Type') as string) ?? '';
+    let body: string;
+
+    if (contentType.includes('application/json')) {
+        body = JSON.stringify(expressReq.body);
+    } else {
+        body = new URLSearchParams(expressReq.body as Record<string, string>).toString();
+        proxyReq.setHeader('Content-Type', 'application/x-www-form-urlencoded');
+    }
+
+    proxyReq.setHeader('Content-Length', Buffer.byteLength(body));
+    proxyReq.write(body);
+}
+
+const proxyOptions = (target: string): Options => ({
+    target,
+    changeOrigin: true,
+    on: { proxyReq: fixBody },
+});
 
 const app: Application = express();
 
@@ -76,26 +105,20 @@ app.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 });
 
 if (appConfig.AUTH_SERVICE_URL !== '') {
-    app.use('/auth', (req, res) => {
-        res.redirect(`${appConfig.AUTH_SERVICE_URL}${req.originalUrl}`);
-    });
+    app.use('/auth', createProxyMiddleware(proxyOptions(appConfig.AUTH_SERVICE_URL)));
 } else {
     app.use('/auth', authRouter);
 }
 app.use('/user', ensureLoggedInMiddleware, userRouter);
 
 if (appConfig.PRODUCT_SERVICE_URL !== '') {
-    app.use('/products', (req, res) => {
-        res.redirect(`${appConfig.PRODUCT_SERVICE_URL}${req.originalUrl}`);
-    });
+    app.use('/products', createProxyMiddleware(proxyOptions(appConfig.PRODUCT_SERVICE_URL)));
 } else {
     app.use('/products', productRouter);
 }
 
 if (appConfig.CART_SERVICE_URL !== '') {
-    app.use('/cart', (req, res) => {
-        res.redirect(`${appConfig.CART_SERVICE_URL}${req.originalUrl}`);
-    });
+    app.use('/cart', createProxyMiddleware(proxyOptions(appConfig.CART_SERVICE_URL)));
 } else {
     app.use('/cart', ensureLoggedInMiddleware, cartRouter);
 }

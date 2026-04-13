@@ -68,6 +68,9 @@ data:
       http_listen_port: 3100
 
     ingester:
+      wal:
+        enabled: true
+        dir: /loki/wal
       lifecycler:
         ring:
           kvstore:
@@ -75,8 +78,6 @@ data:
           replication_factor: 1
       chunk_idle_period: 5m
       chunk_retain_period: 30s
-      wal:
-        dir: /loki/wal
 
     schema_config:
       configs:
@@ -191,6 +192,10 @@ data:
     scrape_configs:
       - job_name: kubernetes-pods
         pipeline_stages:
+          # GKE uses containerd (CRI) which prefixes every log line with:
+          # "<timestamp> stdout|stderr F <actual-message>"
+          # The cri stage strips that prefix so subsequent stages see the raw message.
+          - cri: {}
           # Parse the JSON log line emitted by logger.ts
           - json:
               expressions:
@@ -239,9 +244,14 @@ data:
             target_label: app
 
           # Container log path
+          # Default separator is ";" so the joined value is "<uid>;<container>".
+          # The regex splits them into $1=uid and $2=container so the glob
+          # resolves to the real GKE path: /var/log/pods/<ns>_<pod>_<uid>/<container>/*.log
           - source_labels:
               - __meta_kubernetes_pod_uid
               - __meta_kubernetes_pod_container_name
+            separator: ";"
+            regex: "([^;]+);([^;]+)"
             target_label: __path__
             replacement: /var/log/pods/*$1*/$2/*.log
 ---

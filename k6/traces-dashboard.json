@@ -1,0 +1,378 @@
+{
+  "dashboard": {
+    "title": "TrendTrove — Distributed Traces",
+    "description": "Trace-centric view: latency percentiles, throughput, error rates, slow routes, Jaeger trace search, and service dependency graph.",
+    "tags": ["trendtrove", "traces", "jaeger", "otel"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": { "from": "now-30m", "to": "now" },
+    "schemaVersion": 36,
+    "uid": "trendtrove-traces-v1",
+    "templating": {
+      "list": [
+        {
+          "type": "datasource",
+          "name": "DS_JAEGER",
+          "label": "Jaeger Datasource",
+          "pluginId": "jaeger",
+          "hide": 0,
+          "current": {}
+        },
+        {
+          "type": "textbox",
+          "name": "traceId",
+          "label": "Trace ID",
+          "hide": 0,
+          "current": { "text": "", "value": "" },
+          "query": ""
+        },
+        {
+          "type": "query",
+          "name": "service",
+          "label": "Service",
+          "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+          "query": "label_values(http_requests_total, service)",
+          "refresh": 2,
+          "includeAll": true,
+          "allValue": ".+",
+          "multi": true,
+          "hide": 0,
+          "sort": 1,
+          "current": {}
+        },
+        {
+          "type": "query",
+          "name": "jaeger_service",
+          "label": "Trace Service",
+          "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+          "query": "label_values(http_requests_total, service)",
+          "refresh": 2,
+          "includeAll": false,
+          "multi": false,
+          "hide": 0,
+          "sort": 1,
+          "current": { "text": "app-service", "value": "app-service" }
+        },
+        {
+          "type": "query",
+          "name": "route",
+          "label": "Route",
+          "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+          "query": "label_values(http_requests_total{service=~\"$service\"}, route)",
+          "refresh": 2,
+          "includeAll": true,
+          "allValue": ".+",
+          "multi": true,
+          "hide": 0,
+          "sort": 1,
+          "current": {}
+        }
+      ]
+    },
+    "panels": [
+
+      {
+        "type": "row",
+        "title": "Latency & Throughput",
+        "id": 1,
+        "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 2,
+        "title": "Request Latency Percentiles (p50 / p95 / p99)",
+        "description": "End-to-end HTTP request latency per service. p95 and p99 spikes reveal tail-latency regressions introduced by a canary.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 1, "w": 14, "h": 9 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, sum by (service, le) (rate(http_request_duration_seconds_bucket{service=~\"$service\"}[$__rate_interval])))",
+            "refId": "A",
+            "legendFormat": "p50 — {{service}}"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket{service=~\"$service\"}[$__rate_interval])))",
+            "refId": "B",
+            "legendFormat": "p95 — {{service}}"
+          },
+          {
+            "expr": "histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket{service=~\"$service\"}[$__rate_interval])))",
+            "refId": "C",
+            "legendFormat": "p99 — {{service}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "custom": { "lineWidth": 2, "fillOpacity": 5 },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 0.5, "color": "orange" },
+                { "value": 1, "color": "red" }
+              ]
+            }
+          },
+          "overrides": [
+            {
+              "matcher": { "id": "byRegexp", "options": "^p99.*" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "dash": [6, 3], "fill": "dash" } },
+                { "id": "custom.lineWidth", "value": 1 }
+              ]
+            },
+            {
+              "matcher": { "id": "byRegexp", "options": "^p50.*" },
+              "properties": [
+                { "id": "custom.lineWidth", "value": 1 },
+                { "id": "custom.fillOpacity", "value": 0 }
+              ]
+            }
+          ]
+        },
+        "options": {
+          "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] }
+        }
+      },
+
+      {
+        "id": 3,
+        "title": "Request Rate by Service",
+        "description": "Requests per second per service. Use this alongside the canary ingress weight (10%) to confirm traffic is splitting as expected.",
+        "type": "timeseries",
+        "gridPos": { "x": 14, "y": 1, "w": 10, "h": 9 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "sum by (service) (rate(http_requests_total{service=~\"$service\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "{{service}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "custom": { "lineWidth": 2, "fillOpacity": 8 }
+          }
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        }
+      },
+
+      {
+        "id": 4,
+        "title": "5xx Error Rate by Service",
+        "description": "Percentage of HTTP 5xx responses per service. The canary controller rolls back when this exceeds 5% on app-service-v2 or app-service-v3.",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 10, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "100 * sum by (service) (rate(http_requests_total{service=~\"$service\", status_code=~\"5..\"}[$__rate_interval])) / sum by (service) (rate(http_requests_total{service=~\"$service\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "{{service}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "min": 0,
+            "custom": { "lineWidth": 2, "fillOpacity": 15 },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 1, "color": "yellow" },
+                { "value": 5, "color": "red" }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        },
+        "options": {
+          "legend": { "displayMode": "list", "placement": "bottom" }
+        }
+      },
+
+      {
+        "id": 5,
+        "title": "Request Latency Heatmap",
+        "description": "Distribution of response times across all requests. A healthy service shows a tight band near the bottom. A canary regression fans the distribution upward.",
+        "type": "heatmap",
+        "gridPos": { "x": 12, "y": 10, "w": 12, "h": 8 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "sum by (le) (increase(http_request_duration_seconds_bucket{service=~\"$service\"}[$__rate_interval]))",
+            "refId": "A",
+            "legendFormat": "{{le}}",
+            "format": "heatmap"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "short" }
+        },
+        "options": {
+          "calculate": false,
+          "yAxis": { "unit": "s", "decimals": 3 },
+          "color": {
+            "scheme": "Oranges",
+            "mode": "scheme",
+            "reverse": false,
+            "steps": 64
+          },
+          "cellGap": 1,
+          "tooltip": { "show": true, "yHistogram": true }
+        }
+      },
+
+      {
+        "type": "row",
+        "title": "Route Breakdown",
+        "id": 10,
+        "gridPos": { "x": 0, "y": 18, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 11,
+        "title": "Slowest Routes — p95 Latency",
+        "description": "Top 15 routes by p95 response time. Use this to identify which endpoint a slow trace is coming from before drilling into Jaeger below.",
+        "type": "bargauge",
+        "gridPos": { "x": 0, "y": 19, "w": 12, "h": 9 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "topk(15, histogram_quantile(0.95, sum by (route, service, le) (rate(http_request_duration_seconds_bucket{service=~\"$service\", route=~\"$route\"}[$__rate_interval]))))",
+            "refId": "A",
+            "legendFormat": "{{service}} — {{route}}",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 0.1, "color": "yellow" },
+                { "value": 0.5, "color": "orange" },
+                { "value": 1, "color": "red" }
+              ]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "orientation": "horizontal",
+          "displayMode": "gradient",
+          "showUnfilled": true
+        }
+      },
+
+      {
+        "id": 12,
+        "title": "Request Volume by Route",
+        "description": "Total requests per route in the selected time range. High-volume routes with high error rates are the most impactful to fix.",
+        "type": "bargauge",
+        "gridPos": { "x": 12, "y": 19, "w": 12, "h": 9 },
+        "datasource": { "type": "prometheus", "uid": "afh82c4dmf4sgc" },
+        "targets": [
+          {
+            "expr": "topk(15, sum by (route, service) (increase(http_requests_total{service=~\"$service\", route=~\"$route\"}[$__range])))",
+            "refId": "A",
+            "legendFormat": "{{service}} — {{route}}",
+            "instant": true
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [{ "value": 0, "color": "blue" }]
+            },
+            "color": { "mode": "thresholds" }
+          }
+        },
+        "options": {
+          "reduceOptions": { "calcs": ["lastNotNull"] },
+          "orientation": "horizontal",
+          "displayMode": "basic",
+          "showUnfilled": true
+        }
+      },
+
+      {
+        "type": "row",
+        "title": "Trace Search (Jaeger)",
+        "id": 20,
+        "gridPos": { "x": 0, "y": 28, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 22,
+        "title": "",
+        "type": "text",
+        "gridPos": { "x": 0, "y": 29, "w": 24, "h": 3 },
+        "options": {
+          "mode": "markdown",
+          "content": "**How to find a Trace ID:**\n1. Run `k6 run k6/trace-populate.js` to generate traffic\n2. Open the [Jaeger UI](http://localhost:16686) → select a service → click Search → copy a Trace ID from the results\n3. Paste it into the **Trace ID** box in the variable bar above to load the waterfall below"
+        }
+      },
+
+      {
+        "id": 21,
+        "title": "Trace Waterfall",
+        "description": "Paste a Trace ID into the variable bar above to render the full span waterfall for that trace.",
+        "type": "traces",
+        "gridPos": { "x": 0, "y": 32, "w": 24, "h": 16 },
+        "datasource": { "type": "jaeger", "uid": "dfhwzrc9y3ke8e" },
+        "targets": [
+          {
+            "datasource": { "type": "jaeger", "uid": "dfhwzrc9y3ke8e" },
+            "query": "$traceId",
+            "queryType": "getTrace",
+            "refId": "A"
+          }
+        ],
+        "options": {}
+      },
+
+      {
+        "type": "row",
+        "title": "Service Dependency Graph (Jaeger)",
+        "id": 30,
+        "gridPos": { "x": 0, "y": 41, "w": 24, "h": 1 },
+        "collapsed": false
+      },
+
+      {
+        "id": 31,
+        "title": "Service Dependency Graph",
+        "description": "Inter-service call relationships derived from Jaeger's dependency API. Node size reflects call volume. Use this to understand which services a failing trace flows through.",
+        "type": "nodeGraph",
+        "gridPos": { "x": 0, "y": 42, "w": 24, "h": 14 },
+        "datasource": { "type": "jaeger", "uid": "${DS_JAEGER}" },
+        "targets": [
+          {
+            "datasource": { "type": "jaeger", "uid": "${DS_JAEGER}" },
+            "queryType": "dependencyGraph",
+            "refId": "A"
+          }
+        ],
+        "options": {}
+      }
+
+    ]
+  },
+  "overwrite": true,
+  "folderId": 0
+}
