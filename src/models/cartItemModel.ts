@@ -1,4 +1,4 @@
-import { DataTypes, Model } from 'sequelize';
+import { DataTypes, Model, type ModelStatic } from 'sequelize';
 import { type CartItemAttributes } from '../types/models/cartTypes';
 import { PRODUCT_SIZES } from '../constants';
 import { Product } from '.';
@@ -16,7 +16,7 @@ export class CartItem
     Product: Record<string, string | number | null>;
 }
 
-export function cartItemFactory(sequelize): typeof CartItem {
+export function cartItemFactory(sequelize): ModelStatic<CartItem> {
     CartItem.init(
         {
             id: {

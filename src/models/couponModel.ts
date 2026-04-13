@@ -1,4 +1,4 @@
-import { DataTypes, Model } from 'sequelize';
+import { DataTypes, Model, type ModelStatic } from 'sequelize';
 import { type CouponAttributes } from '../types/models/couponTypes';
 
 export class Coupon
@@ -12,7 +12,7 @@ export class Coupon
     code: string;
 }
 
-export function couponFactory(sequelize): typeof Coupon {
+export function couponFactory(sequelize): ModelStatic<Coupon> {
     return Coupon.init(
         {
             id: {

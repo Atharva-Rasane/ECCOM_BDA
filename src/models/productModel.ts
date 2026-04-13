@@ -1,4 +1,4 @@
-import { DataTypes, Model } from 'sequelize';
+import { DataTypes, Model, type ModelStatic } from 'sequelize';
 import { PRODUCT_CATEGORIES } from '../constants';
 import { type ProductAttributes } from '../types/models/productTypes';
 
@@ -17,7 +17,7 @@ export class Product
     imageURL: string;
 }
 
-export function productFactory(sequelize): typeof Product {
+export function productFactory(sequelize): ModelStatic<Product> {
     return Product.init(
         {
             id: {

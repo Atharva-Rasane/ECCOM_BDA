@@ -2,6 +2,7 @@ import {
     DataTypes,
     type HasManyCreateAssociationMixin,
     Model,
+    type ModelStatic,
     type HasManyGetAssociationsMixin,
     type HasOneSetAssociationMixin,
     type HasOneGetAssociationMixin,
@@ -39,7 +40,7 @@ export class Cart extends Model<CartAttributes> implements CartAttributes {
     setCoupon: HasOneSetAssociationMixin<Coupon, number>;
 }
 
-export function cartFactory(sequelize): typeof Cart {
+export function cartFactory(sequelize): ModelStatic<Cart> {
     return Cart.init(
         {
             id: {

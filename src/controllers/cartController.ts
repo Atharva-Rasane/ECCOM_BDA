@@ -734,11 +734,35 @@ export async function getCheckoutSuccess(
 }
 
 export async function getCheckoutCancel(
-    req: IRequestWithAuthenticatedUser,
+    req: IRequestWithAuthenticatedUser & RequestWithTelemetry,
     res: Response,
     next: NextFunction
 ): Promise<void> {
     try {
+        const userActiveCart = await Cart.findOne({
+            where: {
+                state: CART_STATES.PENDING,
+                userId: req.user.id,
+            },
+        });
+        logTelemetry(
+            req,
+            res,
+            'WARN',
+            'cart_checkout',
+            'cart.abandoned',
+            'User returned from Stripe checkout without completing payment',
+            userActiveCart
+                ? {
+                      cart_checkout: {
+                          cart_id: userActiveCart.id?.toString(),
+                          cart_value: Math.round(userActiveCart.cartTotal * 100),
+                          currency: 'USD',
+                          stage: 'stripe_cancel_return',
+                      },
+                  }
+                : {}
+        );
         res.render('cart/cancel');
     } catch (err) {
         console.log(err);

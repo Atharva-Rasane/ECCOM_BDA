@@ -1,4 +1,4 @@
-import { DataTypes, Model } from 'sequelize';
+import { DataTypes, Model, type ModelStatic } from 'sequelize';
 import type {
     HasOneCreateAssociationMixin,
     HasOneGetAssociationMixin,
@@ -31,7 +31,7 @@ export class User extends Model<UserAttributes> implements UserAttributes {
     createAddress: HasOneCreateAssociationMixin<Address>;
 }
 
-export function userFactory(sequelize): typeof User {
+export function userFactory(sequelize): ModelStatic<User> {
     const user = User.init(
         {
             id: {

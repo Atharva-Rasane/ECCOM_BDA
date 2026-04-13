@@ -1,4 +1,4 @@
-import { DataTypes, Model } from 'sequelize';
+import { DataTypes, Model, type ModelStatic } from 'sequelize';
 import { type AddressAttributes } from '../types/models/addressTypes';
 
 export class Address
@@ -11,7 +11,7 @@ export class Address
     country: string;
 }
 
-export function addressFactory(sequelize): typeof Address {
+export function addressFactory(sequelize): ModelStatic<Address> {
     return Address.init(
         {
             id: {
