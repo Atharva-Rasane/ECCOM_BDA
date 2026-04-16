@@ -1,655 +1,402 @@
-<a id="readme-top"></a>
+# CanaryGuard
 
-<!-- PROJECT LOGO -->
-<br />
-<div align="center">
-  <a href="https://github.com/github_username/repo_name">
-    <img src="./docs/markdown-assets/logo.png" alt="Logo" width="250" height="50">
-  </a>
+**CanaryGuard** is a production-grade canary deployment and automated rollback system built on top of a full-stack e-commerce application (TrendTrove Wears). It demonstrates how to safely release new versions to a subset of users, detect failures in real-time using metrics and logs, and automatically roll back without human intervention.
 
-<h3 align="center">Trendtrove Wears</h3>
+---
 
-  <p align="center">
-    TrendTroove is a functional and user-friendly B-2-C e-commerce app designed to provide a seamless shopping experience for customers with robust administrative capabilities.
-    <br />
-    <a href="https://github.com/techemmy/TrendTrove-Wears/blob/main/README.md"><strong>Explore the docs »</strong></a>
-    <br />
-    <br />
-    ·
-    <a href="https://trendtrovewears.onrender.com/">Visit website</a>
-    ·
+## Table of Contents
 
-  </p>
-</div>
+- [About TrendTrove Wears](#about-trendtrove-wears)
+- [What It Does](#what-it-does)
+- [Architecture Overview](#architecture-overview)
+- [How the Canary System Works](#how-the-canary-system-works)
+- [Observability Stack](#observability-stack)
+- [Project Structure](#project-structure)
+- [Deployment Workflow](#deployment-workflow)
+- [Grafana Dashboards](#grafana-dashboards)
+- [k6 Load Tests](#k6-load-tests)
+- [Tech Stack](#tech-stack)
 
+---
 
+## About TrendTrove Wears
 
-<!-- TABLE OF CONTENTS -->
-<details>
-  <summary>Table of Contents</summary>
-  <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-      <ul>
-        <li><a href="#built-with">Built With</a></li>
-      </ul>
-    </li>
-    <li>
-      <a href="#getting-started">Getting Started</a>
-      <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
-      </ul>
-    </li>
-    <li><a href="#contact">Contact</a></li>
-  </ol>
-</details>
+TrendTrove Wears is the e-commerce application that CanaryGuard is built around. It is a functional B2C clothing store selling Men's, Women's, and Children's wear.
 
+**Features:**
+- Authentication — local email/password and Google OAuth2 login
+- Product catalog — search, pagination, filters (category, price, size, new arrivals), sorting (A–Z, price high/low)
+- Shopping cart — add/remove items, apply coupon codes for discounts
+- Checkout — Stripe payment integration
+- Wishlist — save products for later
+- User profiles — order history, saved shipping details
+- Admin panel — manage products, orders, and coupons (add, edit, delete)
+- Email notifications — invoice emails to customers and admins after orders are processed
 
+TrendTrove serves as the real-world workload that CanaryGuard monitors. Its auth and cart flows are the primary targets of canary failure injection, because they represent the most critical user journeys.
 
-<!-- ABOUT THE PROJECT -->
-## About The Project
+---
 
-TrendTrove Wears is a functional and user-friendly B-2-C e-commerce app designed to provide a seamless shopping experience for customers with robust administrative capabilities. It sells clothing and wears for different categories (Men, Women and Children).
-<div>
-    <img src="./docs/markdown-assets/product-screenshot.png" alt="Logo">
-</div>
+## What It Does
 
+CanaryGuard automates the three-phase canary release lifecycle:
 
-## Summary of the features
-- Authentication and Authorization: Utilizing Password Auth & OAuth for secure user access control.
-
-- Responsive Front-end: A mobile & desktop responsive front-end interface for effortless customer interaction.
-
-- Product Inventory: Browse and add a wide range of clothing and wear items to your cart.
-
-- Efficient Search: Search functionality for finding products quickly and easily.
-
-- Pagination: Smooth navigation through product listings with pagination.
-
-- Advanced Filters: Refine your product search by categories, price range, size, and the latest arrivals
-
-- Sorting Options: Sort products alphabetically (descending or ascending), and by price (high to low or low to high).
-
-- Shopping Cart: Conveniently manage items you wish to purchase.
-
-- Seamless Checkout: Streamlined checkout process for a hassle-free buying experience.
-
-- Coupon Discounts: Apply coupons to enjoy discounts on your cart total
-
-- Payment Integration: Secure Stripe payment integration to complete your purchase
-
-- User Profiles: Personalized profiles for customers to track order history, save shipping details, and manage preferences.
-
-- Admin Interface: An intuitive admin panel to manage orders, product listings and coupons effortlessly (view, add, modify, and delete).
-
-- Wishlist: Giving users the option to add items to a wishlist for future purchases can encourage repeat visits and purchases.
-
-- Email Notification System: Admin users get mailed whenever there's a successful payment. Customers and admin users get mailed an invoice after their order gets processed by the admin.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-## Auth Service Split (Kubernetes)
-
-This repo now supports running auth as a separate service with shared sessions. The main app keeps using server-side sessions, and the auth service handles `/auth/*` routes.
-
-### Environment variables (both services)
-- `SESSION_SECRET` must be identical in both services.
-- `MONGO_URI` must point to the same MongoDB instance (shared session store).
-- `APP_DOMAIN` should be your external site URL (used by Stripe and emails).
-- `GOOGLE_CALLBACK_URL` should be `https://<your-domain>/auth/google/callback`.
-
-Optional cookie settings (recommended for production ingress):
-- `SESSION_COOKIE_SECURE=true`
-- `SESSION_COOKIE_DOMAIN=<your-domain>`
-- `SESSION_COOKIE_SAME_SITE=lax` (or `none` if you must support cross-site flows)
-
-### Main app only
-- `AUTH_SERVICE_URL` should be your external site base URL (same domain as the app), for example `https://your-domain.com`.
-
-### Docker builds
-From repo root:
-```sh
-# Main app
-docker build -t trendtrove-app .
-
-# Auth service
-docker build -f "micro services/auth service/Dockerfile" -t trendtrove-auth .
+```
+v1 (100% traffic, healthy)
+       │
+       ▼
+v2 canary deployed (10% traffic)
+       │
+       ├── healthy? → promote (manual or automated)
+       │
+       └── errors detected? → auto-rollback to v1
 ```
 
-### Ingress routing (example)
-Route `/auth` to the auth service and everything else to the main app:
+- **Canary deployment** — v2 receives 10% of traffic via NGINX ingress weight
+- **Dual-signal failure detection** — monitors both HTTP 5xx error rate (via Prometheus) and pod crash restarts (via kube-state-metrics)
+- **Automated rollback** — a Python controller pod watches Prometheus and triggers `kubectl rollout undo` when thresholds are breached
+- **Full observability** — metrics (Prometheus), logs (Loki), and traces (Jaeger/OpenTelemetry) all wired up and visualised in Grafana
+
+---
+
+## Architecture Overview
+
+```
+                        ┌─────────────────────────────────┐
+                        │         NGINX Ingress            │
+                        │  (ingress.yaml + ingress-canary) │
+                        │                                  │
+                        │  /auth, /products, /cart  ──────►│─── 90% ──► app-service (v1)
+                        │                           ──────►│─── 10% ──► app-service-v2 (canary)
+                        └─────────────────────────────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              ▼                       ▼                       ▼
+       auth-service            cart-service           product-service
+       (passport, OAuth)       (orders, Stripe)       (catalog, search)
+              │                       │                       │
+              └───────────────────────┴───────────────────────┘
+                                      │
+                         ┌────────────┴────────────┐
+                         ▼                         ▼
+                    PostgreSQL                  MongoDB
+                  (business data)          (session store)
+
+                        ┌─────────────────────────────────┐
+                        │        Observability             │
+                        │  Prometheus ◄── /metrics         │
+                        │  Loki ◄── Promtail (stdout)      │
+                        │  Jaeger ◄── OTel Collector       │
+                        │  Grafana (dashboards)            │
+                        └─────────────────────────────────┘
+
+                        ┌─────────────────────────────────┐
+                        │      Canary Controller           │
+                        │  (Python pod, polls Prometheus)  │
+                        │  error rate > 5% OR restarts ≥ 3│
+                        │       → kubectl rollout undo     │
+                        └─────────────────────────────────┘
+```
+
+---
+
+## How the Canary System Works
+
+### 1. Traffic Splitting
+
+The base ingress (`ingress.yaml`) routes 100% of traffic to v1 services. When the canary ingress (`ingress-canary.yaml`) is applied, NGINX uses weighted routing to send **10% of all requests** to `app-service-v2`:
+
 ```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: trendtrove
-spec:
-  rules:
-    - host: your-domain.com
-      http:
-        paths:
-          - path: /auth
-            pathType: Prefix
-            backend:
-              service:
-                name: auth-service
-                port:
-                  number: 3000
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: app-service
-                port:
-                  number: 3000
+nginx.ingress.kubernetes.io/canary: "true"
+nginx.ingress.kubernetes.io/canary-weight: "10"
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+### 2. Failure Injection (FAIL_MODE)
 
-## Product Service Split (Kubernetes)
+v2 is deployed with an environment variable `FAIL_MODE=auth`. The `failureInjectionMiddleware` intercepts all auth-related requests and returns HTTP 500 before they are processed:
 
-Product catalog and search can run as a separate service. The main app forwards `/products/*` to it when `PRODUCT_SERVICE_URL` is set.
-
-### Environment variables
-- Same core env as the main app (Postgres, Mongo for sessions, Stripe, OAuth, mailer).
-- Main app only: `PRODUCT_SERVICE_URL` set to your external site base URL, for example `https://your-domain.com`.
-
-### Docker builds
-```sh
-# Product service
-docker build -f "micro services/product service/Dockerfile" -t trendtrove-product .
-docker push <registry>/trendtrove-product:latest
+```
+Incoming request to /auth/login
+        │
+        ▼
+failureInjectionMiddleware (FAIL_MODE=auth)
+        │
+        ├── path is /auth/* or /login, /signup, /logout, /google?
+        │       YES → log ERROR + return 500 JSON
+        │       NO  → next()
+        ▼
+metricsMiddleware records status_code=500 to Prometheus
 ```
 
-### Ingress routing (example)
-Route `/auth` to auth service, `/products` to product service, and everything else to the main app:
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: trendtrove
-spec:
-  rules:
-    - host: your-domain.com
-      http:
-        paths:
-          - path: /auth
-            pathType: Prefix
-            backend:
-              service:
-                name: auth-service
-                port:
-                  number: 3000
-          - path: /products
-            pathType: Prefix
-            backend:
-              service:
-                name: product-service
-                port:
-                  number: 3000
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: app-service
-                port:
-                  number: 3000
+This simulates a real-world bad deployment — same container image, different runtime behaviour controlled by env var.
+
+### 3. Metrics Recording
+
+Every HTTP response is recorded by `metricsMiddleware` with labels:
+
+```
+http_requests_total{method, route, status_code, service}
+http_request_duration_seconds{method, route, status_code, service}
 ```
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+The `service` label distinguishes v1 (`app-service`) from v2 (`app-service-v2`) via the `SERVICE_NAME` env var. Route labels are normalised — bare paths like `/login` are prefixed to `/auth/login` so Prometheus queries are consistent.
 
-### Built With
+### 4. Canary Controller (Auto-Rollback)
 
-- ![NodeJS](https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white)
-- ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=for-the-badge&logo=typescript&logoColor=white)
-- ![Express.js](https://img.shields.io/badge/express.js-%23404d59.svg?style=for-the-badge&logo=express&logoColor=%2361DAFB)
-- ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
-- ![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?style=for-the-badge&logo=mongodb&logoColor=white)
-- ![Sequelize](https://img.shields.io/badge/Sequelize-52B0E7?style=for-the-badge&logo=Sequelize&logoColor=white)
-- ![HTML5](https://img.shields.io/badge/html5-%23E34F26.svg?style=for-the-badge&logo=html5&logoColor=white)
-- ![CSS3](https://img.shields.io/badge/css3-%231572B6.svg?style=for-the-badge&logo=css3&logoColor=white)
-- ![Bootstrap](https://img.shields.io/badge/bootstrap-%238511FA.svg?style=for-the-badge&logo=bootstrap&logoColor=white)
-- ![Nodemon](https://img.shields.io/badge/NODEMON-%23323330.svg?style=for-the-badge&logo=nodemon&logoColor=%BBDEAD)
-- ![ESLint](https://img.shields.io/badge/ESLint-4B3263?style=for-the-badge&logo=eslint&logoColor=white)
+The controller runs as a Python pod and polls Prometheus every 30 seconds with two signals:
 
+**Signal 1 — HTTP error rate:**
+```promql
+sum(http_requests_total{service="app-service-v2", status_code=~"5.."})
+─────────────────────────────────────────────────────────────────────
+         sum(http_requests_total{service="app-service-v2"})
+```
+If error rate > **5%** → rollback.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+**Signal 2 — Pod restarts:**
+```promql
+sum(kube_pod_container_status_restarts_total{pod=~"trendtrove-app-v2-.*"})
+```
+If restarts ≥ **3** since deployment → rollback.
 
+Signal 2 catches crashes that happen before the pod can serve any requests (and therefore before any metrics are recorded).
 
+**Rollback action:**
+```bash
+kubectl rollout undo deployment/trendtrove-app-v2
+```
+The controller then exits so it does not repeatedly flip versions.
 
-<!-- GETTING STARTED -->
-## Getting Started
+### 5. Structured Logging
 
-This section will guide you on how to get the app running on your local machine
+Every request produces a structured JSON log line to stdout:
+
+```json
+{
+  "timestamp": "2026-04-15T10:23:45.123Z",
+  "level": "ERROR",
+  "service": "app-service-v2",
+  "version": "0.0.0",
+  "environment": "production",
+  "trace_id": "abc123",
+  "request_id": "req-456",
+  "category": "system",
+  "event": "service.unavailable",
+  "message": "Auth service unavailable (FAIL_MODE=auth)",
+  "http": { "method": "POST", "path": "/auth/login", "status_code": 500 }
+}
+```
+
+Promtail collects these from pod stdout, parses the JSON, and promotes `level`, `service`, `event`, `trace_id` as Loki stream labels — enabling filtered queries like `{app="trendtrove-app-v2", level="ERROR"}`.
+
+---
+
+## Observability Stack
+
+| Tool | Role | How it connects |
+|---|---|---|
+| **Prometheus** | Metrics storage & querying | Scrapes `/metrics` on all pods via ServiceMonitors |
+| **kube-state-metrics** | Pod restart counts | Deployed with kube-prometheus-stack |
+| **Loki** | Log aggregation | Receives logs from Promtail |
+| **Promtail** | Log collector | DaemonSet on every node, tails pod stdout, parses JSON |
+| **Jaeger** | Distributed tracing | Receives spans from OTel Collector |
+| **OpenTelemetry Collector** | Trace pipeline | Receives OTLP from app, forwards to Jaeger |
+| **Grafana** | Visualisation | Queries Prometheus, Loki, Jaeger |
+
+---
+
+## Project Structure
+
+```
+ECCOM_BDA/
+├── src/                          # Main application source (TypeScript)
+│   ├── app.ts                    # Express app, proxy routing per service
+│   ├── metrics.ts                # Prometheus counters + middleware
+│   ├── middlewares/
+│   │   ├── failureInjectionMiddleware.ts   # FAIL_MODE chaos injection
+│   │   └── telemetryMiddleware.ts          # Request ID, trace context
+│   ├── telemetry/logger.ts       # Structured JSON logger
+│   ├── controllers/              # Route handlers (auth, cart, product, etc.)
+│   ├── models/                   # Sequelize models (Postgres)
+│   └── routes/                   # Express routers
+│
+├── micro services/               # Independently deployable services
+│   ├── auth service/             # Passport.js, Google OAuth2
+│   ├── cart service/             # Cart, orders, Stripe checkout
+│   ├── product service/          # Catalog, search, filters
+│   ├── mail service/             # Nodemailer email notifications
+│   └── error trigger/            # Manual chaos injection helper
+│
+├── k8deploy/                     # Kubernetes manifests
+│   ├── app.yaml                  # v1 deployment + service
+│   ├── app-v2.yaml               # v2 canary (FAIL_MODE=auth)
+│   ├── ingress.yaml              # Base ingress (100% to v1)
+│   ├── ingress-canary.yaml       # Canary ingress (10% to v2)
+│   ├── canary-controller.yaml    # Auto-rollback controller pod
+│   ├── canary-controller-rbac.yaml  # RBAC for controller
+│   ├── servicemonitors.yaml      # Prometheus scrape targets
+│   ├── loki-stack.yaml           # Loki + Promtail deployment
+│   ├── otel-collector.yaml       # OpenTelemetry collector
+│   ├── jaeger.yaml               # Jaeger tracing backend
+│   ├── postgres.yaml             # PostgreSQL statefulset
+│   ├── mongodb.yaml              # MongoDB statefulset
+│   └── prometheus-values.yaml    # Helm values for kube-prometheus-stack
+│
+├── k6/                           # Load testing scripts
+│   ├── no-chaos/                 # Clean traffic, no failure injection
+│   │   ├── heavy-commerce-mix.js # Full user journey simulation
+│   │   ├── canary-auth-test.js   # Auth flow targeting
+│   │   └── canary-cart-test.js   # Cart flow targeting
+│   └── with-chaos/               # Triggers FAIL_MODE to test rollback
+│       ├── canary-auth-test.js   # Hammers /auth to expose v2 failures
+│       └── canary-cart-test.js   # Hammers /cart to expose v2 failures
+│
+├── DEMO_RUNBOOK.md               # Step-by-step demo execution guide
+├── Dockerfile                    # Container image (all services share base)
+├── docker-compose.yml            # Local development setup
+└── package.json                  # Node.js dependencies and scripts
+```
+
+---
+
+## Deployment Workflow
 
 ### Prerequisites
 
-Here's a list of all the softwares you need to install
-- [NodeJs v18](https://nodejs.org/dist/v18.16.0/) for running app
-- [PostgreSQL](https://www.postgresql.org/download/) for the database
+- GKE cluster (or any Kubernetes cluster with NGINX ingress controller)
+- Helm 3
+- kubectl configured
+- Docker + access to a container registry
+- k6 installed locally
 
-To use the enable the mailer system, make sure you create an App password on google and update the `MAILER_USER` with your email and `MAILER_PASSWORD` with the new app's password.
+### 1. Install observability infrastructure
 
+```bash
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+  -n ecommerce --create-namespace \
+  -f k8deploy/prometheus-values.yaml
+```
 
-### Installation
-1. Clone the repo
-   ```sh
-   https://github.com/techemmy/TrendTrove-Wears.git
-   ```
-2. Enter the project directory
-    ```sh
-    cd Trendtrove-Wears
-    ```
-3. Copy the `.example.env` file into `.env` fill it appropriately
-    ```sh
-    cp .example.env .env
-    ```
-4. Install NPM packages
-   ```sh
-   npm install
-   ```
-5. Make sure you have your PostgreSQL server running
-6. Start the development server
-   ```js
-   npm run dev
-   ```
+### 2. Build and push images
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
-<!-- CONTACT -->
-## Contact
-
-Emmanuel Oloyede - [@itechemmy](https://twitter.com/@itechemmy) - emmanueltopea@gmail.com
-
-Project Link: [https://github.com/techemmy/trendTrove-Wears/](https://github.com/techemmy/trendTrove-Wears/)
-
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-<!-- KUBERNETES SETUP -->
-## Kubernetes Setup Guide
-
-This guide describes how to deploy the app, auth, product, cart, and mail services to a Kubernetes cluster.
-
-### 1) Build and push images
-Build from repo root and push to your registry (Docker Hub, GHCR, etc.).
-```sh
-# Main app image
+```bash
+# v1 (stable)
 docker build -t <registry>/trendtrove-app:latest .
 docker push <registry>/trendtrove-app:latest
 
-# Auth service image
-docker build -f "micro services/auth service/Dockerfile" -t <registry>/trendtrove-auth:latest .
-docker push <registry>/trendtrove-auth:latest
-
-# Product service image
-docker build -f "micro services/product service/Dockerfile" -t <registry>/trendtrove-product:latest .
-docker push <registry>/trendtrove-product:latest
-
-# Cart service image
-docker build -f "micro services/cart service/Dockerfile" -t <registry>/trendtrove-cart:latest .
-docker push <registry>/trendtrove-cart:latest
-
-# Mail service image
-docker build -f "micro services/mail service/Dockerfile" -t <registry>/trendtrove-mail:latest .
-docker push <registry>/trendtrove-mail:latest
+# v2 (same image, different tag — FAIL_MODE injected via env var at runtime)
+docker tag <registry>/trendtrove-app:latest <registry>/trendtrove-app:v2
+docker push <registry>/trendtrove-app:v2
 ```
 
-### 2) Create Secrets and Config
-Create secrets for DB credentials, OAuth, and mailer values.
-```sh
-kubectl create secret generic trendtrove-secrets \
-  --from-literal=SESSION_SECRET=change_me \
-  --from-literal=DATABASE_URL=postgres://postgres:12345678@postgres:5432/ecommerce_dev \
-  --from-literal=MONGO_URI=mongodb://mongodb:27017/ecommerce_dev \
-  --from-literal=STRIPE_API_KEY=sk_test_xxx \
-  --from-literal=GOOGLE_CLIENT_ID=xxx \
-  --from-literal=GOOGLE_CLIENT_SECRET=xxx \
-  --from-literal=MAILER_USER=you@example.com \
-  --from-literal=MAILER_PASSWORD=app_password
+### 3. Deploy base infrastructure
+
+```bash
+kubectl apply -f k8deploy/configmap.yaml
+kubectl apply -f k8deploy/postgres.yaml
+kubectl apply -f k8deploy/mongodb.yaml
+kubectl apply -f k8deploy/auth.yaml
+kubectl apply -f k8deploy/product.yaml
+kubectl apply -f k8deploy/cart.yaml
+kubectl apply -f k8deploy/mail.yaml
+kubectl apply -f k8deploy/ingress.yaml
+kubectl apply -f k8deploy/servicemonitors.yaml
+kubectl apply -f k8deploy/loki-stack.yaml
+kubectl apply -f k8deploy/jaeger.yaml
+kubectl apply -f k8deploy/otel-collector.yaml
 ```
 
-Optional cookie settings for production ingress:
-```sh
-kubectl create configmap trendtrove-config \
-  --from-literal=NODE_ENV=production \
-  --from-literal=APP_DOMAIN=https://your-domain.com \
-  --from-literal=GOOGLE_CALLBACK_URL=https://your-domain.com/auth/google/callback \
-  --from-literal=SESSION_COOKIE_SECURE=true \
-  --from-literal=SESSION_COOKIE_DOMAIN=your-domain.com \
-  --from-literal=SESSION_COOKIE_SAME_SITE=lax
+### 4. Phase 1 — Deploy v1 (healthy baseline)
+
+```bash
+kubectl apply -f k8deploy/app.yaml
+kubectl rollout status deployment/trendtrove-app
+
+# Generate traffic
+k6 run k6/no-chaos/heavy-commerce-mix.js
 ```
 
-### 3) Deploy databases (example)
-If you already have managed Postgres/MongoDB, skip this. Otherwise, create basic deployments/services or use Helm charts.
+All Grafana dashboards should show green — zero errors, healthy purchase funnel.
 
-### 4) Deploy the app, auth, product, cart, and mail services
-Create five deployments and services. Example (replace image names):
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: trendtrove-app
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: trendtrove-app
-  template:
-    metadata:
-      labels:
-        app: trendtrove-app
-    spec:
-      containers:
-        - name: app
-          image: <registry>/trendtrove-app:latest
-          ports:
-            - containerPort: 3000
-          envFrom:
-            - secretRef:
-                name: trendtrove-secrets
-            - configMapRef:
-                name: trendtrove-config
-          env:
-            - name: AUTH_SERVICE_URL
-              value: https://your-domain.com
-            - name: PRODUCT_SERVICE_URL
-              value: https://your-domain.com
-            - name: CART_SERVICE_URL
-              value: https://your-domain.com
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: app-service
-spec:
-  selector:
-    app: trendtrove-app
-  ports:
-    - port: 3000
-      targetPort: 3000
+### 5. Phase 2 — Deploy v2 canary (broken auth)
+
+```bash
+kubectl apply -f k8deploy/app-v2.yaml
+kubectl apply -f k8deploy/ingress-canary.yaml
+kubectl apply -f k8deploy/canary-controller.yaml
+
+kubectl rollout status deployment/trendtrove-app-v2
+
+# Same traffic script — canary gets 10%
+k6 run k6/no-chaos/heavy-commerce-mix.js
 ```
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: trendtrove-auth
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: trendtrove-auth
-  template:
-    metadata:
-      labels:
-        app: trendtrove-auth
-    spec:
-      containers:
-        - name: auth
-          image: <registry>/trendtrove-auth:latest
-          ports:
-            - containerPort: 3000
-          envFrom:
-            - secretRef:
-                name: trendtrove-secrets
-            - configMapRef:
-                name: trendtrove-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: auth-service
-spec:
-  selector:
-    app: trendtrove-auth
-  ports:
-    - port: 3000
-      targetPort: 3000
+Within ~60 seconds:
+- Grafana shows error rate climbing on `app-service-v2`
+- Loki streams ERROR logs with `event=service.unavailable`
+- Canary controller detects > 5% error rate and triggers rollback automatically
+
+Watch the controller:
+```bash
+kubectl logs canary-controller -f
 ```
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: trendtrove-product
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: trendtrove-product
-  template:
-    metadata:
-      labels:
-        app: trendtrove-product
-    spec:
-      containers:
-        - name: product
-          image: <registry>/trendtrove-product:latest
-      ports:
-        - containerPort: 3000
-      envFrom:
-        - secretRef:
-            name: trendtrove-secrets
-        - configMapRef:
-            name: trendtrove-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: product-service
-spec:
-  selector:
-    app: trendtrove-product
-  ports:
-    - port: 3000
-      targetPort: 3000
+### 6. Phase 3 — Rollback and verify
+
+The controller rolls back automatically. To clean up the canary resources:
+
+```bash
+kubectl delete -f k8deploy/ingress-canary.yaml --ignore-not-found
+kubectl delete pod canary-controller --ignore-not-found
+kubectl delete -f k8deploy/app-v2.yaml --ignore-not-found
+```
+
+Grafana returns to all green — 100% traffic back on v1.
 
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: trendtrove-cart
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: trendtrove-cart
-  template:
-    metadata:
-      labels:
-        app: trendtrove-cart
-    spec:
-      containers:
-        - name: cart
-          image: <registry>/trendtrove-cart:latest
-          ports:
-            - containerPort: 3000
-          envFrom:
-            - secretRef:
-                name: trendtrove-secrets
-            - configMapRef:
-                name: trendtrove-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: cart-service
-spec:
-  selector:
-    app: trendtrove-cart
-  ports:
-    - port: 3000
-      targetPort: 3000
+
+## Grafana Dashboards
+
+| Dashboard | File | Purpose |
+|---|---|---|
+| Operations Centre | `k6/main-dashboard.json` | Primary demo view — traffic, errors, purchase funnel |
+| Cart & Auth Health | `k6/failure-detection-dashboard.json` | Per-service error rates |
+| Application Observability | `k6/grafana-dashboard.json` | Log volume, status codes, business events |
+| Canary Auth Failure | `k6/canary-auth-failure-dashboard.json` | v1 vs v2 error rate, rollback signal |
+| Service Graph | `k6/service-graph-dashboard.json` | Inter-service dependency map |
+| Traces | `k6/traces-dashboard.json` | Jaeger trace explorer |
+
+Import via **Grafana → Dashboards → Import → Upload JSON**. Select your Prometheus and Loki datasources when prompted.
 
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: trendtrove-mail
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: trendtrove-mail
-  template:
-    metadata:
-      labels:
-        app: trendtrove-mail
-    spec:
-      containers:
-        - name: mail
-          image: <registry>/trendtrove-mail:latest
-          ports:
-            - containerPort: 3000
-          envFrom:
-            - secretRef:
-                name: trendtrove-secrets
-            - configMapRef:
-                name: trendtrove-config
+
+## k6 Load Tests
+
+| Script | When to use |
+|---|---|
+| `k6/no-chaos/heavy-commerce-mix.js` | Main demo traffic — realistic browsing, cart, and purchase flows |
+| `k6/no-chaos/canary-auth-test.js` | Auth-focused traffic without chaos |
+| `k6/no-chaos/canary-cart-test.js` | Cart-focused traffic without chaos |
+| `k6/with-chaos/canary-auth-test.js` | Forces auth failures on v2 to demonstrate rollback |
+| `k6/with-chaos/canary-cart-test.js` | Forces cart failures on v2 to demonstrate rollback |
+
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: mail-service
-spec:
-  selector:
-    app: trendtrove-mail
-  ports:
-    - port: 3000
-      targetPort: 3000
-```
 
-## Cart / Orders Service Split (Kubernetes)
+## Tech Stack
 
-Cart, checkout, and order state handling can run as a separate service. The main app forwards `/cart/*` to it when `CART_SERVICE_URL` is set.
-
-### Environment variables
-- Same core env as the main app (Postgres, Mongo for sessions, Stripe, OAuth, mailer).
-- Main app only: `CART_SERVICE_URL` set to your external site base URL, for example `https://your-domain.com`.
-
-### Docker builds
-```sh
-# Cart service
-docker build -f "micro services/cart service/Dockerfile" -t trendtrove-cart .
-docker push <registry>/trendtrove-cart:latest
-```
-
-### Ingress routing (example)
-Route `/auth` to auth service, `/products` to product service, `/cart` to cart service, and everything else to the main app:
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: trendtrove
-spec:
-  rules:
-    - host: your-domain.com
-      http:
-        paths:
-          - path: /auth
-            pathType: Prefix
-            backend:
-              service:
-                name: auth-service
-                port:
-                  number: 3000
-          - path: /products
-            pathType: Prefix
-            backend:
-              service:
-                name: product-service
-                port:
-                  number: 3000
-          - path: /cart
-            pathType: Prefix
-            backend:
-              service:
-                name: cart-service
-                port:
-                  number: 3000
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: app-service
-                port:
-                  number: 3000
-```
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-## Mail / Notification Service Split (Kubernetes)
-
-Email sending can run as a separate service. The main app proxies all emails to it when `MAIL_SERVICE_URL` is set.
-
-### Environment variables
-- Same mailer env as the main app: `MAILER_USER`, `MAILER_PASSWORD`.
-- Main app only: `MAIL_SERVICE_URL` should point to the mail service DNS inside the cluster, for example `http://mail-service:3000`.
-
-### Docker builds
-```sh
-# Mail service
-docker build -f "micro services/mail service/Dockerfile" -t trendtrove-mail .
-docker push <registry>/trendtrove-mail:latest
-```
-
-### Routing
-No ingress path needed; the main app calls the mail service over the cluster network.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-### 5) Ingress routing
-Route `/auth` to the auth service, `/products` to the product service, `/cart` to the cart service, and everything else to the main app.
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: trendtrove
-spec:
-  rules:
-    - host: your-domain.com
-      http:
-        paths:
-          - path: /auth
-            pathType: Prefix
-            backend:
-              service:
-                name: auth-service
-                port:
-                  number: 3000
-          - path: /products
-            pathType: Prefix
-            backend:
-              service:
-                name: product-service
-                port:
-                  number: 3000
-          - path: /cart
-            pathType: Prefix
-            backend:
-              service:
-                name: cart-service
-                port:
-                  number: 3000
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: app-service
-                port:
-                  number: 3000
-```
-
-### 6) Apply manifests
-```sh
-kubectl apply -f k8deploy/
-```
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js 20, TypeScript |
+| Framework | Express.js |
+| Auth | Passport.js (local + Google OAuth2) |
+| Databases | PostgreSQL (Sequelize), MongoDB (sessions) |
+| Payments | Stripe |
+| Container | Docker |
+| Orchestration | Kubernetes (GKE), NGINX Ingress |
+| Metrics | Prometheus, prom-client |
+| Logs | Loki, Promtail |
+| Traces | Jaeger, OpenTelemetry |
+| Dashboards | Grafana |
+| Load Testing | k6 |
